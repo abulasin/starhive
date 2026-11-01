@@ -1,0 +1,46 @@
+# Cloud build for Starhive Defense. Runs on a Codemagic Mac, so you don't need one.
+# Before the first build, set the two values marked CHANGE below.
+workflows:
+  ios-release:
+    name: Starhive iOS release
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    integrations:
+      app_store_connect: Starhive key        # CHANGE if you named your API key differently in Codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: io.starhive.defense   # CHANGE only if you changed it in project.yml too
+      xcode: latest
+    scripts:
+      - name: Download game fonts
+        script: |
+          cd Game/fonts
+          base="https://github.com/google/fonts/raw/main/ofl"
+          for f in silkscreen/Silkscreen-Regular.ttf silkscreen/Silkscreen-Bold.ttf \
+                   chakrapetch/ChakraPetch-Regular.ttf chakrapetch/ChakraPetch-SemiBold.ttf; do
+            curl -fsSL -O "$base/$f" || echo "Could not fetch $f, the game will use a fallback font"
+          done
+          ls -la
+      - name: Generate Xcode project
+        script: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Set build number
+        script: |
+          agvtool new-version -all "${BUILD_NUMBER:-1}"
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Build app
+        script: |
+          xcode-project build-ipa \
+            --project Starhive.xcodeproj \
+            --scheme Starhive
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
